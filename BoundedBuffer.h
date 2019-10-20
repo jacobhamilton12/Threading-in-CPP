@@ -26,19 +26,26 @@ private:
 
 public:
 	BoundedBuffer(int _cap):cap(_cap){
-
+		
 	}
 	~BoundedBuffer(){
-
-	}
-
-	void push(vector<char> data){
 		
 	}
 
+	void push(vector<char> data){
+		unique_lock<mutex>lck(mtx);
+		while(q.size()>=cap){slot_available.wait(lck);}
+		q.push(data);
+		data_available.notify_one();
+	}
+
 	vector<char> pop(){
-		vector<char> temp;
-		return temp;  
+		unique_lock<mutex>lck(mtx);
+		while(q.size()>=cap){data_available.wait(lck);}
+		vector<char> temp = q.front();
+		q.pop(); 
+		slot_available.notify_one();
+		return temp;
 	}
 };
 

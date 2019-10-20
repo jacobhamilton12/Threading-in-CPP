@@ -7,18 +7,23 @@
 using namespace std;
 
 
-void * patient_function(void *arg)
+void * patient_function(BoundedBuffer &buff)
 {
     /* What will the patient threads do? */
-    
+    vector<char> point(sizeof(datamsg));
+    point = *(vector<char>*)(new datamsg(1,.004,1));
+    buff.push(point);
 }
 
-void *worker_function(void *arg)
+void * worker_function(FIFORequestChannel* chan, BoundedBuffer &buff)
 {
     /*
 		Functionality of the worker threads	
     */
-
+    chan->cwrite((char*)new newchannelmsg(), sizeof(newchannelmsg));
+    char * newname = chan->cread();
+    FIFORequestChannel newchan (newname, FIFORequestChannel::CLIENT_SIDE);
+    newchan->cwrite(, sizeof(datamsg));
     
 }
 int main(int argc, char *argv[])
@@ -42,13 +47,13 @@ int main(int argc, char *argv[])
     BoundedBuffer request_buffer(b);
 	HistogramCollection hc;
 	
-	
-	
     struct timeval start, end;
     gettimeofday (&start, 0);
 
     /* Start all threads here */
-	
+    thread pat = thread(patient_function, ref(request_buffer));
+    thread work = thread(worker_function, chan, ref(request_buffer));
+
 
 	/* Join all threads here */
     gettimeofday (&end, 0);

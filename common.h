@@ -60,6 +60,14 @@ public:
     }
 };
 
+class newchannelmsg{
+public:
+    MESSAGE_TYPE mtype;
+    newchannelmsg (){
+        mtype = NEWCHANNEL_MSG;
+    }
+};
+
 void EXITONERROR(string msg);
 vector<string> split (string line, char separator);
 __int64_t get_file_size (string filename);
