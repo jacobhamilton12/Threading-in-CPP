@@ -34,18 +34,24 @@ public:
 
 	void push(vector<char> data){
 		unique_lock<mutex>lck(mtx);
-		while(q.size()>=cap){slot_available.wait(lck);}
+		slot_available.wait(lck, [&]{return q.size() < cap;});
 		q.push(data);
 		data_available.notify_one();
 	}
 
 	vector<char> pop(){
 		unique_lock<mutex>lck(mtx);
-		while(q.size()>=cap){data_available.wait(lck);}
+		data_available.wait(lck, [&]{return q.size() > 0;});
 		vector<char> temp = q.front();
 		q.pop(); 
 		slot_available.notify_one();
 		return temp;
+	}
+	bool isEmpty(){
+		mtx.lock();
+		bool stuff = q.size() == 0;
+		mtx.unlock();
+		return stuff;
 	}
 };
 
