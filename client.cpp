@@ -8,7 +8,7 @@ using namespace std;
 
 
 //logging vars
-vector<int> totals;
+//vector<int> totals;
 
 void * patient_function(BoundedBuffer &buff, int pat, int num)
 {
@@ -36,7 +36,7 @@ void * file_function(FIFORequestChannel* chan, BoundedBuffer &buff, char* filena
     strcpy(buffer + sizeof(filemsg),filename);
     chan->cwrite(buffer, sizeof(filemsg) + 20);
     __int64_t length = *(__int64_t*)chan->cread();
-    cout << length << endl;
+    //cout << length << endl;
     ftruncate(fileno(outfile), length);
     
 
@@ -69,32 +69,27 @@ void * worker_function(FIFORequestChannel* chan, BoundedBuffer &buff, int work, 
     char * newname = chan->cread();
     FIFORequestChannel newchan (newname, FIFORequestChannel::CLIENT_SIDE);
     m.unlock();
-    double data;
-    char* ptr;
+    double data = 0;
+    char* ptr = nullptr;
     m.lock();
     while(buff.size() > 0){
-        m.unlock();
         vector<char> msg(buff.pop());
-        m.lock();
         if(((datamsg*)msg.data())->mtype == DATA_MSG){
             newchan.cwrite(msg.data(), sizeof(datamsg));
             data = *(double*)newchan.cread();
+            m.unlock();
             hc.get(((datamsg*)msg.data())->person -1)->update(data);
+            //m.unlock();
         }else{
             long int offset = ((filemsg*)msg.data())->offset;
             newchan.cwrite(msg.data(), sizeof(filemsg) + 20);
             ptr = newchan.cread();
+            m.unlock();
             fseek(outfile, offset, SEEK_SET);
-            //lseek (fileno(outfile), offset, SEEK_CUR);
             fwrite(ptr, sizeof(char),strlen(ptr), outfile);
         }
-        m.unlock();
-        //cout << ((datamsg*)point.data())->person << endl;
-        //m.unlock();
-        //cout << data << endl;
-        totals.at(work-1)++;
+        //totals.at(work-1)++;
         m.lock();
-        //cout << "worker: " << work << endl;
     }
 
     if(m.try_lock())
@@ -131,7 +126,7 @@ int main(int argc, char *argv[])
     struct timeval start, end;
     gettimeofday (&start, 0);
     
-    char* fname = nullptr;//{"1.csv"};
+    char* fname = {"1.csv"};
     
     // Start all threads here 
     vector<thread> wthreads; 
@@ -147,7 +142,7 @@ int main(int argc, char *argv[])
     }
     cout << "Loading..." << endl;
     for(int i = 1; i <= w; i++){
-        totals.push_back(0);
+        //totals.push_back(0);
         wthreads.push_back(thread(worker_function, chan, ref(request_buffer),i,ref(mut),ref(hc), ref(outfile)));
     }
     
@@ -176,9 +171,9 @@ int main(int argc, char *argv[])
     //wthreads.clear();
 
     //print logging stuff
-    for(int i = 0; i < totals.size(); i++){
-        cout << "Worker " << i+1 << "\tTotal: " << totals.at(i) << endl;
-    }
+    //for(int i = 0; i < totals.size(); i++){
+      //  cout << "Worker " << i+1 << "\tTotal: " << totals.at(i) << endl;
+    //}
     
 
 
