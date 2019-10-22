@@ -47,11 +47,11 @@ public:
 		slot_available.notify_one();
 		return temp;
 	}
-	bool isEmpty(){
+	int size(){
 		mtx.lock();
-		bool stuff = q.size() == 0;
+		int size = q.size();
 		mtx.unlock();
-		return stuff;
+		return size;
 	}
 };
 

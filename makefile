@@ -18,4 +18,4 @@ dataserver: dataserver.cpp  FIFOreqchannel.o common.o
 	g++ -g -w -std=c++11 -o dataserver dataserver.cpp FIFOreqchannel.o common.o -lpthread -lrt
 
 clean:
-	rm -rf *.o fifo* dataserver client 
+	rm -rf *.o fifo* received/* dataserver client 
