@@ -15,6 +15,9 @@ public:
     void add (Histogram* h){
         hists.push_back (h);
     }
+    Histogram* get(int i){
+        return hists.at(i);
+    }
     
     void print (){
         int nhists = hists.size();
