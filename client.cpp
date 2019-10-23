@@ -56,7 +56,7 @@ bool file_function(FIFORequestChannel* chan, BoundedBuffer &buff, char* filename
 
 }
 
-void * worker_function(FIFORequestChannel* chan, BoundedBuffer &buff, int work, mutex &m, HistogramCollection &hc, FILE * outfile)
+void * worker_function(FIFORequestChannel* chan, BoundedBuffer &buff, int work, mutex &m, HistogramCollection &hc, FILE * outfile, vector<mutex*> &mutexes)
 {
     /*
 		Functionality of the worker threads	
@@ -66,22 +66,25 @@ void * worker_function(FIFORequestChannel* chan, BoundedBuffer &buff, int work, 
     chan->cwrite((char*)new newchannelmsg(), sizeof(newchannelmsg));
     char * newname = chan->cread();
     FIFORequestChannel newchan (newname, FIFORequestChannel::CLIENT_SIDE);
+    m.unlock();
     double data = 0;
-    char* ptr = nullptr;
+    char* ptr = new char[20];
+    m.lock();
     while(buff.size() > 0){
+        //m.unlock();
         vector<char> msg(buff.pop());
         m.unlock();
         if(((datamsg*)msg.data())->mtype == DATA_MSG){
             //m.lock();
             newchan.cwrite(msg.data(), sizeof(datamsg));
             data = *(double*)newchan.cread();
-            cout << data << endl;
+            //cout << data << endl;
             //m.unlock();
             int pers = ((datamsg*)msg.data())->person -1;
-            m.lock();
+            mutexes.at(pers)->lock();
             hc.get(pers)->update(data);
-            m.unlock();
-        }else if(((datamsg*)msg.data())->mtype == FILE_MSG){
+            mutexes.at(pers)->unlock();
+        }else{
             m.lock();
             long int offset = ((filemsg*)msg.data())->offset;
             newchan.cwrite(msg.data(), sizeof(filemsg) + 20);
@@ -90,8 +93,6 @@ void * worker_function(FIFORequestChannel* chan, BoundedBuffer &buff, int work, 
             fwrite(ptr, 1,((filemsg*)msg.data())->length, outfile);
             m.unlock();
             //fflush(outfile);
-        }else{
-            break;
         }
         totals.at(work-1)++;
         m.lock();
@@ -108,7 +109,7 @@ int main(int argc, char *argv[])
 {
     int n = 100;    //default number of requests per "patient"
     int p = 10;     // number of patients [1,15]
-    int w = 200;    //default number of worker threads
+    int w = 1;    //default number of worker threads
     int b = 1000; 	// default capacity of the request buffer, you should change this default
 	int m = MAX_MESSAGE; 	// default capacity of the file buffer
 
@@ -129,8 +130,9 @@ int main(int argc, char *argv[])
     while((c = getopt(argc, argv, "f:n:p:w:b:")) != -1){
         switch(c) {
             case 'f':
+                fname = new char[20];
                 if(optarg)
-                    strcpy(fname, optarg);
+                    fname = optarg;
                 break;
             case 'n':
                 if(optarg)
@@ -152,7 +154,8 @@ int main(int argc, char *argv[])
                 std::cout << "Error" << std::endl;
         }
     }
-    char* filename = {"received/"};
+    char* filename = new char[30];
+    strcpy(filename,"received/");
     if(fname != nullptr)
         strcat(filename, fname);
     FILE * outfile;
@@ -175,13 +178,13 @@ int main(int argc, char *argv[])
             pthreads.push_back(thread(patient_function, ref(request_buffer), i,n));
         }
     }else{
-        fthread = thread(file_function, chan, ref(request_buffer), fname, outfile, ref(mut), ref(mutexes));
+        fthread = thread(file_function, chan, ref(request_buffer), fname, outfile, ref(mut));
     }
    
     cout << "Loading..." << endl;
     for(int i = 1; i <= w; i++){
         totals.push_back(0);
-        wthreads.push_back(thread(worker_function, chan, ref(request_buffer),i,ref(mut),ref(hc), ref(outfile)));
+        wthreads.push_back(thread(worker_function, chan, ref(request_buffer),i,ref(mut),ref(hc), ref(outfile), ref(mutexes)));
     }
     
 
