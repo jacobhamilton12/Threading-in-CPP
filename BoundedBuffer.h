@@ -18,6 +18,7 @@ private:
 	/* mutexto protect the queue from simultaneous producer accesses
 	or simultaneous consumer accesses */
 	mutex mtx;
+	bool closed = false;
 	bool more = true;
 	
 	/* condition that tells the consumers that some data is there */
@@ -34,9 +35,11 @@ public:
 	}
 
 	void push(vector<char> data){
-		unique_lock<mutex>lck(mtx);
-		slot_available.wait(lck, [&]{return q.size() < cap;});
+		unique_lock<mutex>lock(mtx);
+		slot_available.wait(lock, [&](){return q.size() < cap || closed;});
+		if(closed) return;
 		q.push(data);
+		lock.unlock();
 		data_available.notify_one();
 	}
 
@@ -45,6 +48,7 @@ public:
 		data_available.wait(lck, [&]{return q.size() > 0;});
 		vector<char> temp = q.front();
 		q.pop(); 
+		lck.unlock();
 		slot_available.notify_one();
 		return temp;
 	}

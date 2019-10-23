@@ -25,8 +25,8 @@ void * patient_function(BoundedBuffer &buff, int pat, int num)
     }
 }
 
-bool file_function(FIFORequestChannel* chan, BoundedBuffer &buff, char* filename, FILE * outfile, mutex &m){
-     m.lock();
+void * file_function(FIFORequestChannel* chan, BoundedBuffer &buff, char* filename, FILE * outfile, mutex &m, int &bSize){
+    m.lock();
     int size = sizeof(filename)/sizeof(char);
     char * buffer = new char[sizeof(filemsg) + sizeof(filename)];
     memcpy(buffer,new filemsg(0,0), sizeof(filemsg));
@@ -35,7 +35,7 @@ bool file_function(FIFORequestChannel* chan, BoundedBuffer &buff, char* filename
     __int64_t length = *(__int64_t*)chan->cread();
     //cout << length << endl;
     ftruncate(fileno(outfile), length);
-    m.unlock();
+    //m.unlock();
 
     //adds messages to buffer
     int len = 128;
@@ -43,17 +43,21 @@ bool file_function(FIFORequestChannel* chan, BoundedBuffer &buff, char* filename
     if(len > length)
         len = length;
     while(len > 0){
+        //m.lock();
         buffer = new char[sizeof(filemsg) + sizeof(filename)];
         memcpy(buffer,new filemsg(offset,len), sizeof(filemsg));
         strcpy(buffer + sizeof(filemsg),filename);
+        //m.lock();
         buff.push(vector<char>(buffer, buffer + sizeof(filemsg) + strlen(filename)));
+        //m.unlock();
         offset += 128;
         if(length - offset < 128){
             len = length - offset;
         }
+        cout << "filefunction" << offset << endl;
     }
-    //m.unlock();
-
+    m.unlock();
+    buff.setMore(false);
 }
 
 void * worker_function(FIFORequestChannel* chan, BoundedBuffer &buff, int work, mutex &m, HistogramCollection &hc, FILE * outfile, vector<mutex*> &mutexes)
@@ -70,32 +74,38 @@ void * worker_function(FIFORequestChannel* chan, BoundedBuffer &buff, int work, 
     double data = 0;
     char* ptr = new char[20];
     m.lock();
-    while(buff.size() > 0){
+    while(buff.size() > 0 || buff.hasMore()){
         //m.unlock();
-        vector<char> msg(buff.pop());
-        m.unlock();
-        if(((datamsg*)msg.data())->mtype == DATA_MSG){
-            //m.lock();
-            newchan.cwrite(msg.data(), sizeof(datamsg));
-            data = *(double*)newchan.cread();
-            //cout << data << endl;
+        if(buff.size() > 0){
+            vector<char> msg(buff.pop());
             //m.unlock();
-            int pers = ((datamsg*)msg.data())->person -1;
-            mutexes.at(pers)->lock();
-            hc.get(pers)->update(data);
-            mutexes.at(pers)->unlock();
-        }else{
+            if(((datamsg*)msg.data())->mtype == DATA_MSG){
+                //m.lock();
+                newchan.cwrite(msg.data(), sizeof(datamsg));
+                data = *(double*)newchan.cread();
+                //cout << data << endl;
+                //m.unlock();
+                int pers = ((datamsg*)msg.data())->person -1;
+                mutexes.at(pers)->lock();
+                hc.get(pers)->update(data);
+                mutexes.at(pers)->unlock();
+            }else{
+                //m.lock();
+                long int offset = ((filemsg*)msg.data())->offset;
+                newchan.cwrite(msg.data(), sizeof(filemsg) + 20);
+                ptr = newchan.cread();
+                fseek(outfile, offset, SEEK_SET);
+                fwrite(ptr, 1,((filemsg*)msg.data())->length, outfile);
+                cout << "filestuff" << endl;
+                m.unlock();
+                //fflush(outfile);
+            }
+            totals.at(work-1)++;
             m.lock();
-            long int offset = ((filemsg*)msg.data())->offset;
-            newchan.cwrite(msg.data(), sizeof(filemsg) + 20);
-            ptr = newchan.cread();
-            fseek(outfile, offset, SEEK_SET);
-            fwrite(ptr, 1,((filemsg*)msg.data())->length, outfile);
+        }else{
             m.unlock();
-            //fflush(outfile);
         }
-        totals.at(work-1)++;
-        m.lock();
+        cout << "loop" << endl;
     }
 
     if(m.try_lock())
@@ -109,8 +119,8 @@ int main(int argc, char *argv[])
 {
     int n = 100;    //default number of requests per "patient"
     int p = 10;     // number of patients [1,15]
-    int w = 1;    //default number of worker threads
-    int b = 1000; 	// default capacity of the request buffer, you should change this default
+    int w = 100;    //default number of worker threads
+    int b = 10000; 	// default capacity of the request buffer, you should change this default
 	int m = MAX_MESSAGE; 	// default capacity of the file buffer
 
     srand(time_t(NULL));
@@ -125,7 +135,7 @@ int main(int argc, char *argv[])
 	FIFORequestChannel* chan = new FIFORequestChannel("control", FIFORequestChannel::CLIENT_SIDE);
     BoundedBuffer request_buffer(b);
 	HistogramCollection hc;
-    char* fname = nullptr;
+    char* fname = {"1.csv"};
     int c;
     while((c = getopt(argc, argv, "f:n:p:w:b:")) != -1){
         switch(c) {
@@ -154,7 +164,7 @@ int main(int argc, char *argv[])
                 std::cout << "Error" << std::endl;
         }
     }
-    char* filename = new char[30];
+    char* filename = new char[strlen(fname) + 10];
     strcpy(filename,"received/");
     if(fname != nullptr)
         strcat(filename, fname);
@@ -178,7 +188,7 @@ int main(int argc, char *argv[])
             pthreads.push_back(thread(patient_function, ref(request_buffer), i,n));
         }
     }else{
-        fthread = thread(file_function, chan, ref(request_buffer), fname, outfile, ref(mut));
+        fthread = thread(file_function, chan, ref(request_buffer), fname, outfile, ref(mut), ref(b));
     }
    
     cout << "Loading..." << endl;
