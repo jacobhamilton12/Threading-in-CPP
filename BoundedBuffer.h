@@ -18,6 +18,7 @@ private:
 	/* mutexto protect the queue from simultaneous producer accesses
 	or simultaneous consumer accesses */
 	mutex mtx;
+	bool more = true;
 	
 	/* condition that tells the consumers that some data is there */
 	condition_variable data_available;
@@ -52,6 +53,12 @@ public:
 		int size = q.size();
 		mtx.unlock();
 		return size;
+	}
+	bool hasMore(){
+		return more;
+	}
+	bool setMore(bool _more){
+		more = _more;
 	}
 };
 
