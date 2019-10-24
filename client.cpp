@@ -39,7 +39,7 @@ void * file_function(FIFORequestChannel* chan, BoundedBuffer &buff, char* filena
     //m.unlock();
 
     //adds messages to buffer
-    int len = 128;
+    int len = 256;
     __int64_t offset = 0;
     if(len > length)
         len = length;
@@ -51,8 +51,8 @@ void * file_function(FIFORequestChannel* chan, BoundedBuffer &buff, char* filena
         //m.lock();
         buff.push(vector<char>(buffer, buffer + sizeof(filemsg) + strlen(filename)));
         //m.unlock();
-        offset += 128;
-        if(length - offset < 128){
+        offset += 256;
+        if(length - offset < 256){
             len = length - offset;
         }
     }
