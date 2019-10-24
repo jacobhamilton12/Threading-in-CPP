@@ -16,13 +16,14 @@ void * patient_function(BoundedBuffer &buff, int pat, int num)
     char * dmsg = (char*)(new datamsg(pat,0,1));
     //char * dmsg2 = (char*)(new datamsg(pat,sec,2));
     for(int i = 0; i < num; i++){
-        
+        //cout << "333333333333" << endl;
         vector<char> point(dmsg, dmsg + sizeof(datamsg));
         //vector<char> point2(dmsg2, dmsg2 + sizeof(datamsg));
         buff.push(point);
         ((datamsg*)dmsg)->seconds += .004;
         //buff.push(point2);
     }
+    buff.setMore(false);
 }
 
 void * file_function(FIFORequestChannel* chan, BoundedBuffer &buff, char* filename, FILE * outfile, mutex &m, int &bSize){
@@ -54,7 +55,6 @@ void * file_function(FIFORequestChannel* chan, BoundedBuffer &buff, char* filena
         if(length - offset < 128){
             len = length - offset;
         }
-        cout << "filefunction" << offset << endl;
     }
     m.unlock();
     buff.setMore(false);
@@ -75,37 +75,36 @@ void * worker_function(FIFORequestChannel* chan, BoundedBuffer &buff, int work, 
     char* ptr = new char[20];
     m.lock();
     while(buff.size() > 0 || buff.hasMore()){
+        //cout << "hhhhhhhhhhhhhhhhhhH" << endl;
         //m.unlock();
         if(buff.size() > 0){
             vector<char> msg(buff.pop());
-            //m.unlock();
+            m.unlock();
             if(((datamsg*)msg.data())->mtype == DATA_MSG){
                 //m.lock();
                 newchan.cwrite(msg.data(), sizeof(datamsg));
                 data = *(double*)newchan.cread();
-                //cout << data << endl;
                 //m.unlock();
                 int pers = ((datamsg*)msg.data())->person -1;
                 mutexes.at(pers)->lock();
                 hc.get(pers)->update(data);
                 mutexes.at(pers)->unlock();
             }else{
-                //m.lock();
+                m.lock();
                 long int offset = ((filemsg*)msg.data())->offset;
                 newchan.cwrite(msg.data(), sizeof(filemsg) + 20);
                 ptr = newchan.cread();
                 fseek(outfile, offset, SEEK_SET);
                 fwrite(ptr, 1,((filemsg*)msg.data())->length, outfile);
-                cout << "filestuff" << endl;
                 m.unlock();
                 //fflush(outfile);
             }
+            //cout << "herererer" << endl;
             totals.at(work-1)++;
             m.lock();
         }else{
             m.unlock();
         }
-        cout << "loop" << endl;
     }
 
     if(m.try_lock())
@@ -135,7 +134,7 @@ int main(int argc, char *argv[])
 	FIFORequestChannel* chan = new FIFORequestChannel("control", FIFORequestChannel::CLIENT_SIDE);
     BoundedBuffer request_buffer(b);
 	HistogramCollection hc;
-    char* fname = {"1.csv"};
+    char* fname = nullptr;
     int c;
     while((c = getopt(argc, argv, "f:n:p:w:b:")) != -1){
         switch(c) {
@@ -164,12 +163,14 @@ int main(int argc, char *argv[])
                 std::cout << "Error" << std::endl;
         }
     }
-    char* filename = new char[strlen(fname) + 10];
-    strcpy(filename,"received/");
-    if(fname != nullptr)
-        strcat(filename, fname);
     FILE * outfile;
-    outfile = fopen(filename, "w+");
+    char* filename;
+    if(fname != nullptr){
+        filename = new char[strlen(fname) + 10];
+        strcpy(filename,"received/");
+        strcat(filename, fname);
+        outfile = fopen(filename, "w+");
+    }
 	
     struct timeval start, end;
     gettimeofday (&start, 0);
